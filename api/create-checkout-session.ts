@@ -31,7 +31,7 @@ export default async function handler(req: any, res: any) {
       line_items: lineItems,
       mode: 'payment',
       success_url: `${req.headers.origin || 'http://localhost:3000'}/#/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.origin || 'http://localhost:3000'}/#/checkout`,
+      cancel_url: `${req.headers.origin || 'http://localhost:3000'}/#/payment-failed`,
       customer_email: email,
       metadata: {
         total: total.toString(),

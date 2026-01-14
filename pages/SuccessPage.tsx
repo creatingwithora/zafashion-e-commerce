@@ -1,10 +1,11 @@
 
 import React, { useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCart } from '../CartContext';
 
 const SuccessPage: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { clearCart } = useCart();
 
   // Get order ID from either navigation state or localStorage (from Stripe redirect)
@@ -15,6 +16,10 @@ const SuccessPage: React.FC = () => {
     clearCart();
     localStorage.removeItem('pendingOrderId');
   }, [clearCart]);
+
+  const handleViewReceipt = () => {
+    navigate('/receipt', { state: { orderId } });
+  };
 
   return (
     <div className="max-w-2xl mx-auto py-12 px-4 text-center space-y-8">
@@ -58,7 +63,7 @@ const SuccessPage: React.FC = () => {
         >
           Continue Shopping
         </Link>
-        <button className="bg-white text-navy-900 border border-slate-200 font-black py-4 px-10 rounded-xl hover:bg-slate-50 transition-all active:scale-95">
+        <button onClick={handleViewReceipt} className="bg-white text-navy-900 border border-slate-200 font-black py-4 px-10 rounded-xl hover:bg-slate-50 transition-all active:scale-95">
           View Receipt
         </button>
       </div>
