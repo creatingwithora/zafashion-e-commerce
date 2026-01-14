@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../CartContext';
 import { CheckoutForm } from '../types';
 import { createOrder } from '../src/services/orders';
+import { stripePromise } from '../src/lib/stripe';
 
 const CheckoutPage: React.FC = () => {
   const { cart, cartSubtotal, cartTax, cartTotal, clearCart } = useCart();
@@ -18,11 +19,8 @@ const CheckoutPage: React.FC = () => {
     postalCode: ''
   });
 
+  // Simplified validation - Stripe will handle card details
   const isFormValid =
-    form.cardNumber.length === 16 &&
-    form.cardHolderName.trim() !== '' &&
-    form.expiryDate.length === 5 &&
-    form.cvv.length === 3 &&
     form.email.includes('@') &&
     form.postalCode.length >= 4;
 
@@ -38,10 +36,27 @@ const CheckoutPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Create order in Supabase
+      // Create Stripe Checkout Session
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: cart,
+          email: form.email,
+          total: cartTotal
+        })
+      });
+
+      const session = await response.json();
+
+      if (session.error) {
+        throw new Error(session.error);
+      }
+
+      // Save order to Supabase before redirecting
       const orderId = await createOrder({
         email: form.email,
-        cardHolderName: form.cardHolderName,
+        cardHolderName: form.cardHolderName || 'Stripe Customer',
         postalCode: form.postalCode,
         subtotal: cartSubtotal,
         tax: cartTax,
@@ -49,12 +64,18 @@ const CheckoutPage: React.FC = () => {
         items: cart
       });
 
-      clearCart();
-      navigate('/success', { state: { orderId } });
-    } catch (error) {
-      console.error('Order creation failed:', error);
-      alert('Failed to create order. Please try again.');
-    } finally {
+      // Store order ID for success page
+      localStorage.setItem('pendingOrderId', orderId);
+
+      // Redirect to Stripe Checkout
+      if (session.url) {
+        window.location.href = session.url;
+      } else {
+        throw new Error('No checkout URL returned from Stripe');
+      }
+    } catch (error: any) {
+      console.error('Payment failed:', error);
+      alert(`Payment failed: ${error.message}. Please try again.`);
       setIsSubmitting(false);
     }
   };
@@ -101,72 +122,6 @@ const CheckoutPage: React.FC = () => {
 
               <div className="grid grid-cols-1 gap-4">
                 <label className="block text-sm font-bold text-slate-700">
-                  Cardholder Name
-                  <input
-                    type="text"
-                    name="cardHolderName"
-                    required
-                    value={form.cardHolderName}
-                    onChange={handleInputChange}
-                    placeholder="As written on card"
-                    className="mt-1 w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-900 transition-all"
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4">
-                <label className="block text-sm font-bold text-slate-700">
-                  Card Number
-                  <div className="relative">
-                    <input
-                      type="text"
-                      name="cardNumber"
-                      required
-                      maxLength={16}
-                      value={form.cardNumber}
-                      onChange={handleInputChange}
-                      placeholder="0000 0000 0000 0000"
-                      className="mt-1 w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-900 transition-all"
-                    />
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-1">
-                      <div className="w-8 h-5 bg-slate-200 rounded"></div>
-                      <div className="w-8 h-5 bg-slate-100 rounded"></div>
-                    </div>
-                  </div>
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <label className="block text-sm font-bold text-slate-700">
-                  Expiry (MM/YY)
-                  <input
-                    type="text"
-                    name="expiryDate"
-                    required
-                    maxLength={5}
-                    value={form.expiryDate}
-                    onChange={handleInputChange}
-                    placeholder="MM/YY"
-                    className="mt-1 w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-900 transition-all"
-                  />
-                </label>
-                <label className="block text-sm font-bold text-slate-700">
-                  CVV
-                  <input
-                    type="text"
-                    name="cvv"
-                    required
-                    maxLength={3}
-                    value={form.cvv}
-                    onChange={handleInputChange}
-                    placeholder="123"
-                    className="mt-1 w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-900 transition-all"
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4">
-                <label className="block text-sm font-bold text-slate-700">
                   Billing Postal Code
                   <input
                     type="text"
@@ -178,6 +133,20 @@ const CheckoutPage: React.FC = () => {
                     className="mt-1 w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-900 transition-all"
                   />
                 </label>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mt-4">
+                <div className="flex items-start gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600 flex-shrink-0 mt-0.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" />
+                    <path d="M12 8h.01" />
+                  </svg>
+                  <div className="text-sm text-blue-800">
+                    <p className="font-bold mb-1">Secure Payment with Stripe</p>
+                    <p>After clicking "Continue to Payment", you'll be redirected to Stripe's secure checkout page to enter your card details.</p>
+                  </div>
+                </div>
               </div>
             </div>
 

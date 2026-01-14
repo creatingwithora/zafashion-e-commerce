@@ -1,10 +1,20 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useCart } from '../CartContext';
 
 const SuccessPage: React.FC = () => {
   const location = useLocation();
-  const orderId = location.state?.orderId || 'N/A';
+  const { clearCart } = useCart();
+
+  // Get order ID from either navigation state or localStorage (from Stripe redirect)
+  const orderId = location.state?.orderId || localStorage.getItem('pendingOrderId') || 'N/A';
+
+  useEffect(() => {
+    // Clear cart and pending order ID when success page loads
+    clearCart();
+    localStorage.removeItem('pendingOrderId');
+  }, [clearCart]);
 
   return (
     <div className="max-w-2xl mx-auto py-12 px-4 text-center space-y-8">
